@@ -36,7 +36,7 @@ std::optional<RelativeOperand> relativeOperand(const std::vector<std::uint8_t>& 
             ++cur;
             continue;
         }
-        if (b == PrefixRepne || b == PrefixSegDs || b == PrefixAddressSize) {
+        if (b == PrefixRepne || b == PrefixSegCs || b == PrefixSegDs || b == PrefixSegEs || b == PrefixSegSs || b == PrefixAddressSize) {
             hasRexW = false;
             if (b == PrefixAddressSize) addressSize32 = true;
             ++cur;
