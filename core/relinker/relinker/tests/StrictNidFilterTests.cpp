@@ -380,6 +380,54 @@ std::vector<std::uint8_t> elfFixture(const StrictReachabilityInput& input) {
     return bytes;
 }
 
+void filterSegmentRelativeImports() {
+    for (const std::uint8_t segment : {0x00, 0x26, 0x2e, 0x36, 0x3e, 0x64, 0x65}) {
+        for (const bool address32 : {false, true}) {
+            for (const std::uint8_t operation : {0x15, 0x25, 0x8b, 0x8d}) {
+                auto input = fixture();
+                input.Text.assign(32, 0);
+                input.TextVaddr = 0x100001000ull;
+                input.Entries = {input.TextVaddr};
+                input.ImportSlots = {0x2000, 0x100002000ull};
+                std::vector<std::uint8_t> instruction;
+                instruction.reserve(15);
+                if (segment != 0) instruction.push_back(segment);
+                if (address32) instruction.push_back(0x67);
+                if (operation == 0x8b || operation == 0x8d)
+                    instruction.insert(instruction.end(), {0x48, operation, 0x05});
+                else
+                    instruction.insert(instruction.end(), {0xff, operation});
+                const auto displacementOffset = instruction.size();
+                instruction.resize(displacementOffset + 4);
+                const auto next = instruction.size();
+                write(instruction, displacementOffset, static_cast<std::int32_t>(0x100002000ull - input.TextVaddr - next));
+                std::copy(instruction.begin(), instruction.end(), input.Text.begin());
+                input.Text[next] = 0xc3;
+                const auto target = address32 ? 0x2000ull : 0x100002000ull;
+                const bool resolved = operation == 0x8d || (segment != 0x64 && segment != 0x65);
+                const auto expected = resolved ? std::set<std::uint64_t>{target} : std::set<std::uint64_t>{};
+                require(AnalyzeStrictReachability(input).ImportSlots == expected,
+                        "Strict filter treated a segment-relative operand as a flat import");
+                auto bytes = elfFixture(input);
+                write<std::uint16_t>(bytes, 56, 3);
+                write<std::uint32_t>(bytes, 176, 1);
+                write<std::uint32_t>(bytes, 180, 6);
+                write<std::uint64_t>(bytes, 184, 0x380);
+                write<std::uint64_t>(bytes, 192, 0x100002000ull);
+                write<std::uint64_t>(bytes, 208, 0x80);
+                write<std::uint64_t>(bytes, 216, 0x80);
+                const std::vector<Relinker::NidReference> references = {
+                    {"low", {}, 6, 0x300, 0x2000, 0}, {"high", {}, 6, 0x318, 0x100002000ull, 0}};
+                for (const auto filter : {Relinker::MakeUnusedNidFilter(), Relinker::MakeStrictUnusedNidFilter(testProgress)}) {
+                    const auto kept = filter->Filter(references, bytes, input.Text, input.TextVaddr);
+                    require(kept.size() == expected.size() && (kept.empty() || kept[0].RelocationAddress == target),
+                            "ELF filter retained the wrong segment-relative import");
+                }
+            }
+        }
+    }
+}
+
 void filterCallbackDataImports() {
     auto input = fixture();
     ripOperand(input, 0, {0x48, 0x8D, 0x3D}, 0x1020);
@@ -933,6 +981,7 @@ int main() {
         vectorInstructionLengths();
         exceptionLandingPads();
         exceptionDataWithoutPersonality();
+        filterSegmentRelativeImports();
         filterCallbackDataImports();
         filterAndPltCompaction();
         relativeTableTargetsBounds();

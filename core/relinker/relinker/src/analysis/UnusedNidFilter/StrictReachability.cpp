@@ -165,7 +165,7 @@ private:
                     if (!isCode(target)) throw RelinkerException("Strict filter: direct branch leaves code", address);
                     region.Edges.insert(target);
                 }
-                if (info.HasRipRelativeDisp) {
+                if (info.HasRipRelativeDisp && (info.SegmentPrefix == 0 || !info.HasMemoryOperand)) {
                     std::int32_t displacement;
                     std::memcpy(&displacement, input.Text.data() + offset + info.RipRelativeDispOffset, sizeof(displacement));
                     auto target = next + static_cast<VirtualAddress>(static_cast<std::int64_t>(displacement));

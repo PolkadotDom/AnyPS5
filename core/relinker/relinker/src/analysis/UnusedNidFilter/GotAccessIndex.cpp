@@ -38,7 +38,7 @@ std::unique_ptr<IGotAccessIndex> BuildGotAccessIndex(
         if (available == 0) continue;
 
         Codegen::DecodedInstructionInfo info = decoder.DecodeInstruction(text.data() + bufOff, available);
-        if (!info.HasRipRelativeDisp) continue;
+        if (!info.HasRipRelativeDisp || (info.SegmentPrefix != 0 && info.HasMemoryOperand)) continue;
 
         VirtualAddress nextVaddr = va + static_cast<VirtualAddress>(info.Length);
         std::int32_t disp = 0;
