@@ -165,17 +165,19 @@ private:
                     if (!isCode(target)) throw RelinkerException("Strict filter: direct branch leaves code", address);
                     region.Edges.insert(target);
                 }
-                if (info.HasRipRelativeDisp && (info.SegmentPrefix == 0 || !info.HasMemoryOperand)) {
+                if (info.HasRipRelativeDisp) {
                     std::int32_t displacement;
                     std::memcpy(&displacement, input.Text.data() + offset + info.RipRelativeDispOffset, sizeof(displacement));
                     auto target = next + static_cast<VirtualAddress>(static_cast<std::int64_t>(displacement));
                     if (info.AddressSize32) target = static_cast<std::uint32_t>(target);
-                    if (input.ImportSlots.contains(target)) region.Imports.insert(target);
-                    if (!info.IsTwoByteOpcode && info.Opcode == 0x8D) {
-                        addAddressTaken(target);
-                        tableBases.insert(target);
+                    if (info.SegmentPrefix == 0 || !info.HasMemoryOperand) {
+                        if (input.ImportSlots.contains(target)) region.Imports.insert(target);
+                        if (!info.IsTwoByteOpcode && info.Opcode == 0x8D) {
+                            addAddressTaken(target);
+                            tableBases.insert(target);
+                        }
+                        if (const auto pointer = input.Pointers.find(target); pointer != input.Pointers.end()) region.Edges.insert(pointer->second);
                     }
-                    if (const auto pointer = input.Pointers.find(target); pointer != input.Pointers.end()) region.Edges.insert(pointer->second);
                 }
                 using enum Codegen::ControlFlowKind;
                 if (info.FlowKind == IndirectCall || info.FlowKind == IndirectJump || ((info.FlowKind == Call || info.FlowKind == UnconditionalJump) && info.HasRipRelativeDisp)) ++region.IndirectTransfers;
